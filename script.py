@@ -18,18 +18,17 @@ class Matrix:
     def is_conformable(_matrix_a: 'Matrix', _matrix_b: 'Matrix') -> bool:
         return _matrix_a.Dimensions[1] == _matrix_b.Dimensions[0]
 
-    def __init__(self, mat: list) -> None:
+    def __init__(self, matrix: np.array) -> None:
         # Instance Variables
-        self._data: list[list[float]] = []
+        # self._data: list[list[float]] = []
+        self._data: np.array = matrix
         self.Dimensions: tuple[int, int]
 
-        row_length: int = len(mat[0])
-        column_length: int = len(mat)
-        for row in mat:
+        row_length: int = matrix.shape[1]
+        column_length: int = matrix.shape[0]
+        for row in matrix:
             if len(row) != row_length:
                 raise self.__ErrorCodes['rowLength']
-
-            self._data.append(row)
 
         self.Dimensions = (column_length, row_length) # the length of a column is how many rows there are and vice versa
 
@@ -37,16 +36,9 @@ class Matrix:
         if self.Dimensions != other.Dimensions:
             raise self.__ErrorCodes['sameDimensions']
 
-        rows, cols = self.Dimensions
-        resultant_list = [[0 for _ in range(cols)] for _ in range(rows)]
+        return Matrix(np.add(self._data, other._data))
 
-        for i in range(rows):
-            for j in range(cols):
-                resultant_list[i][j] = self._data[i][j] + other._data[i][j]
-
-        return Matrix(resultant_list)
-
-    def get_list(self):
+    def get_array(self):
         return self._data
 
     def __str__(self) -> str:
@@ -69,7 +61,7 @@ class Matrix:
                 raise self.__ErrorCodes['nonConformable']
 
             rows, cols = (self.Dimensions[0], other.Dimensions[1])
-            resultant_list = [[0 for _ in range(cols)] for _ in range(rows)]
+            resultant_array = np.zeros(shape=(cols, rows), dtype=np.float32)
 
             run_length = self.Dimensions[1]
 
@@ -77,10 +69,10 @@ class Matrix:
             n = 0 # tracking current position of run
 
             while a_run < rows and b_run < cols:
-                element_a = self._data[a_run][n]
-                element_b = other._data[n][b_run]
+                element_a = self._data[a_run, n]
+                element_b = other._data[n, b_run]
 
-                resultant_list[a_run][b_run] += element_a*element_b
+                resultant_array[a_run, b_run] += element_a*element_b
 
                 if n == run_length - 1:
                     n = 0
@@ -94,14 +86,13 @@ class Matrix:
                 n += 1
 
 
-            return Matrix(resultant_list)
+            return Matrix(resultant_array)
         else:
             raise self.__ErrorCodes['operandTypes']
 
     def __rmul__(self, other) -> 'Matrix':
         if isinstance(other, (int, float)):
-            resultant_list = [[e * other for e in row] for row in self._data]
-            return Matrix(resultant_list)
+            return Matrix(self._data * other)
         else:
             raise self.__ErrorCodes['operandTypes']
 
@@ -116,20 +107,16 @@ class NumbaMatrix(Matrix):
 
     def __rmul__(self, other: (int, float)) -> 'NumbaMatrix':
         if isinstance(other, (int, float)):
-            resultant_list = [[e * other for e in row] for row in self._data]
-            return NumbaMatrix(resultant_list)
+            return NumbaMatrix(self._data * other)
         else:
             raise self.__ErrorCodes['operandTypes']
 
     def _cuda_matmul(self, other: 'NumbaMatrix', use_shared=False):
-        A = np.array(self._data, dtype=np.float32)
-        B = np.array(other._data, dtype=np.float32)
-
         rows, cols = (self.Dimensions[0], other.Dimensions[1])
         C = np.zeros((rows, cols), dtype=np.float32)
 
-        d_A = cuda.to_device(A)
-        d_B = cuda.to_device(B)
+        d_A = cuda.to_device(self._data)
+        d_B = cuda.to_device(other._data)
         d_C = cuda.to_device(C)
 
         TILE_SIZE = 16
@@ -144,9 +131,8 @@ class NumbaMatrix(Matrix):
             matmul_kernel[blocks_per_grid, threads_per_block](d_A, d_B, d_C)
 
         result_array = d_C.copy_to_host()
-        result_list = result_array.tolist()
 
-        return NumbaMatrix(result_list)
+        return NumbaMatrix(result_array)
 
 @cuda.jit
 def matmul_kernel(A, B, C):
@@ -199,50 +185,31 @@ def matmul_shared_kernel(A, B, C):
         C[row, col] = accumulator
 
 def generate_matrix(dimensions: (int, int)) -> Matrix:
-    resultant_list = (np.random.randint(-20, 21, size=(dimensions[1], dimensions[0]))).tolist()
-    return Matrix(resultant_list)
+    resultant_array = np.random.randint(-20, 21, size=(dimensions[1], dimensions[0]))
+    return Matrix(resultant_array)
 
 def generate_numba_matrix(dimensions: (int, int)) -> Matrix:
-    resultant_list = (np.random.randint(-20, 21, size=(dimensions[1], dimensions[0]))).tolist()
-    return NumbaMatrix(resultant_list)
+    resultant_array = np.random.randint(-20, 21, size=(dimensions[1], dimensions[0]))
+    return NumbaMatrix(resultant_array)
 
-"""
-if __name__ == '__main__':
-    data_list : list = [
-        # (size , time)
-    ]
-    initial_size : int = 5
-    no_iterations : int = 50
-    increment : int = 5
-
-    _current_iteration = 0
-    _current_size = initial_size
-    while _current_iteration < no_iterations:
-        matrix_a = generate_matrix((_current_size, _current_size))
-        matrix_b = generate_matrix((_current_size, _current_size))
-
-        start_time = time.time()
-        result = matrix_a * matrix_b
-        end_time = time.time()
-
-        data_list.append((_current_size, round(end_time - start_time, 4)))
-        _current_size += increment
-        _current_iteration += 1
-
-    print(tabulate(data_list, headers=["Dimensions","Time"], tablefmt="pipe"))
-"""
-
-def test_matrix_time(initial_size : int, no_iterations : int, size_increment : int) -> list[tuple[int, float]]:
+def test_matrix_time(initial_size : int, no_iterations : int, size_increment : int, matrix_mode="classic") -> list[tuple[int, float]]:
     data_list : list[tuple[int, float]] = []
 
     _current_iteration = 0
     _current_size = initial_size
     while _current_iteration < no_iterations:
-        matrix_a = generate_matrix((_current_size, _current_size))
-        matrix_b = generate_matrix((_current_size, _current_size))
+        _dimensions = (_current_size, _current_size)
+        if matrix_mode == "classic":
+            matrix_a = generate_matrix(_dimensions)
+            matrix_b = generate_matrix(_dimensions)
+        elif matrix_mode == "cuda":
+            matrix_a = generate_numba_matrix(_dimensions)
+            matrix_b = generate_numba_matrix(_dimensions)
+        else:
+            raise TypeError("matrix_mode must be 'classic' or 'cuda'")
 
         start_time = time.time()
-        result = matrix_a * matrix_b
+        _ = matrix_a * matrix_b
         end_time = time.time()
 
         data_list.append((_current_size, round(end_time - start_time, 4)))
@@ -252,8 +219,8 @@ def test_matrix_time(initial_size : int, no_iterations : int, size_increment : i
     return data_list
 
 if __name__ == '__main__':
-    MatrixOne = generate_numba_matrix((25000, 25000))
-    MatrixTwo = generate_numba_matrix((25000, 25000))
-    Result = MatrixOne * MatrixTwo
-    np.savetxt('result.txt', Result.get_list(), fmt='%.2f')
+    MatrixOne = generate_numba_matrix((2, 2))
+    MatrixTwo = generate_numba_matrix((2, 2))
+    Result = MatrixOne + MatrixTwo
+    np.savetxt('result.txt', Result.get_array(), fmt='%.2f')
     print('done')
