@@ -193,7 +193,9 @@ def generate_numba_matrix(dimensions: (int, int)) -> Matrix:
     return NumbaMatrix(resultant_array)
 
 def test_matrix_time(initial_size : int, no_iterations : int, size_increment : int, matrix_mode="classic") -> list[tuple[int, float]]:
-    data_list : list[tuple[int, float]] = []
+    data_list : list[tuple[int, float]] = [
+        # (size, time)
+    ]
 
     _current_iteration = 0
     _current_size = initial_size
@@ -218,9 +220,10 @@ def test_matrix_time(initial_size : int, no_iterations : int, size_increment : i
 
     return data_list
 
+def output_data_list(data_list: list[tuple[int, float]]):
+    print(' '.join(str(tup[0]) for tup in data_list)) # size
+    print(' '.join(str(tup[1]) for tup in data_list)) # time
+
 if __name__ == '__main__':
-    MatrixOne = generate_numba_matrix((2, 2))
-    MatrixTwo = generate_numba_matrix((2, 2))
-    Result = MatrixOne + MatrixTwo
-    np.savetxt('result.txt', Result.get_array(), fmt='%.2f')
-    print('done')
+    data_list = test_matrix_time(5, 5, 5)
+    output_data_list(data_list)
