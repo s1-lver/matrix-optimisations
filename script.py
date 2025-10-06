@@ -225,5 +225,13 @@ def output_data_list(data_list: list[tuple[int, float]]):
     print(' '.join(str(tup[1]) for tup in data_list)) # time
 
 if __name__ == '__main__':
-    data_list = test_matrix_time(5, 5, 5)
+    initial_size = 5
+    iterations = 500
+    size_increment = 20
+
+    print("CLASSIC")
+    data_list = test_matrix_time(initial_size, iterations, size_increment, matrix_mode="classic")
+    output_data_list(data_list)
+    print("\nCUDA")
+    data_list = test_matrix_time(initial_size, iterations, size_increment, matrix_mode="cuda")
     output_data_list(data_list)
